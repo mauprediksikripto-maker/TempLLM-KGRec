@@ -1,0 +1,61 @@
+# TempLLM-KGRec Configuration — MovieLens-20M
+# Best hyperparameters from grid search (paper Table 4)
+
+dataset: movielens
+data_dir: data/processed/movielens/
+
+# Model architecture
+embedding_dim: 256       # d = 256
+llm_dim: 4096            # LLaMA-3-8B output dimension
+gnn_layers: 3            # L = 3 (over-smoothing at L≥5)
+
+# C1 — Temporal KG Builder
+delta_t: 30              # snapshot window in days
+lambda_decay: 0.1        # time-decay coefficient λ (peak NDCG at λ=0.1)
+min_lifetime_days: 5     # discard entities active <5 days
+num_snapshots: 48        # B = 48 for 4-year history
+
+# C2 — LLM-KG Bridge Encoder
+llm_model: meta-llama/Meta-Llama-3-8B
+llm_batch_size: 64
+anchor_ratio: 0.10       # top-10% by degree centrality
+min_anchor_degree: 3     # exclude items with <3 KG relations
+
+# C3 — Dynamic Graph Propagation
+ssl_temperature: 0.2     # τ = 0.2 (robust across [0.1, 0.5])
+edge_dropout: 0.20       # View A: drop 20% edges
+feature_mask_ratio: 0.15 # View B: mask 15% features
+
+# C4 — Cold-Start Meta-Bridge
+maml_inner_lr: 0.01      # α_i inner-loop rate (peak at 0.01)
+maml_support_size: 5     # K = 5 support interactions
+maml_inner_steps: 2      # 2 steps (convergence with schema prior)
+schema_dim: 34           # 32 type bins + mean_lifetime + mean_degree
+
+# C5 — Unified Ranking Layer
+beta_init: [0.5, 0.3, 0.2]  # (β_GNN, β_LLM, β_Temp) — trained end-to-end
+
+# Training
+learning_rate: 0.001     # Adam outer-loop lr
+batch_size: 2048         # full training (A100 80GB)
+# batch_size: 512        # reduced (RTX 3090/4090 24GB, set grad_accum_steps=4)
+negative_samples: 200    # uniform negatives per positive
+
+# Loss weights (grid searched over {0.01, 0.05, 0.1, 0.5})
+mu1: 0.05                # SSL loss weight
+mu2: 0.10                # alignment loss weight
+
+# Training schedule
+warmup_epochs: 30
+patience: 10             # early stopping on val NDCG@10
+max_epochs: 200
+
+# Evaluation
+eval_k_list: [10, 20]
+full_ranking: true       # score against all non-interacted items
+cold_start_k: 5          # users with ≤5 training interactions
+
+# Hardware
+device: cuda
+num_workers: 4
+seed: 42
